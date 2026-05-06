@@ -1,0 +1,11 @@
+---
+title: "P8106_Final"
+author: "Charlotte Zhang"
+date: "2026-05-06"
+output: pdf_document
+---
+
+```{r}
+load("severity.RData")
+```
+
