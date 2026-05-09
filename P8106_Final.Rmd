@@ -37,9 +37,15 @@ my_dat <- my_dat %>%
                     levels = c(0,1),
                     labels = c("Female","Male")),
 
-    hypertension = factor(hypertension),
-    diabetes = factor(diabetes),
-    vaccine = factor(vaccine),
+    hypertension = factor(hypertension,
+                    levels = c(0,1),
+                    labels = c("No","Yes")),
+    diabetes = factor(diabetes,
+               levels = c(0,1),
+               labels = c("No","Yes")),
+    vaccine = factor(vaccine,
+              levels = c(0,1),
+              labels = c("Not vaccinated","Vaccinated")),
 
     race = factor(race,
                   levels = c(1,2,3,4),
@@ -74,15 +80,12 @@ knitr::kable(summary_table)
 ```{r}
 # Continuous variable
 p1 <- ggplot(my_dat,
-             aes(x = age,
+             aes(x = severity,
+                 y = age,
                  fill = severity)) +
-  geom_histogram(
-    bins = 30,
-    alpha = 0.6,
-    position = "identity"
-  ) +
+  geom_boxplot() +
   theme_bw() +
-  ggtitle("Age Distribution")
+  ggtitle("Age by Severity")
 
 p2 <- ggplot(my_dat,
              aes(x = severity,
@@ -136,7 +139,7 @@ p7 <- ggplot(my_dat,
  (p4 + p5 + p6) /
  (p7)) +
 plot_layout(guides = "collect",
-            heights = c(1,1,1.6)) &
+            heights = c(1,1,1.5)) &
 theme(
   plot.title = element_text(size = 10),
   axis.title = element_text(size = 9),
@@ -151,42 +154,60 @@ c1 <- ggplot(my_dat,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Gender vs Severity")
+  ggtitle("Gender vs Severity") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 
 c2 <- ggplot(my_dat,
              aes(x = race,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Race vs Severity")
+  ggtitle("Race vs Severity") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 
 c3 <- ggplot(my_dat,
              aes(x = smoking,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Smoking vs Severity")
+  ggtitle("Smoking vs Severity") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 
 c4 <- ggplot(my_dat,
              aes(x = hypertension,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Hypertension vs Severity")
+  ggtitle("Hypertension vs Severity") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 
 c5 <- ggplot(my_dat,
              aes(x = diabetes,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Diabetes vs Severity")
+  ggtitle("Diabetes vs Severity") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 
 c6 <- ggplot(my_dat,
              aes(x = vaccine,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Vaccination vs Severity")
+  ggtitle("Vaccination vs Severity") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 
 (c1 + c2 + c3) /
 (c4 + c5 + c6)
@@ -218,7 +239,15 @@ corrplot(
 
 # Logistic Regression
 ```{r}
+logit_fit <- glm(
+  severity ~ age + gender + race + smoking +
+    bmi + hypertension + diabetes +
+    SBP + LDL + vaccine + depression,
+  data = train_dat,
+  family = binomial
+)
 
+summary(logit_fit)
 ```
 
 
