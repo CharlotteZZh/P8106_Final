@@ -4,8 +4,221 @@ author: "Charlotte Zhang"
 date: "2026-05-06"
 output: pdf_document
 ---
-
+```{r}
+library(tidyverse)
+library(caret)
+library(tidymodels)
+library(gbm)
+library(e1071)
+library(ranger)
+library(pROC)
+library(pdp)
+library(patchwork)
+library(gridExtra)
+library(corrplot)
+```
+# Load the data
 ```{r}
 load("severity.RData")
+dat <- na.omit(dat)
+set.seed(4027)
+my_dat <- dat[sample(nrow(dat), 1000), ]
 ```
+
+# Convert Variables
+```{r}
+my_dat <- my_dat %>%
+  mutate(
+    severity = factor(severity,
+                      levels = c(0,1),
+                      labels = c("NotSevere","Severe")),
+
+    gender = factor(gender,
+                    levels = c(0,1),
+                    labels = c("Female","Male")),
+
+    hypertension = factor(hypertension),
+    diabetes = factor(diabetes),
+    vaccine = factor(vaccine),
+
+    race = factor(race,
+                  levels = c(1,2,3,4),
+                  labels = c("White","Asian","Black","Hispanic")),
+
+    smoking = factor(smoking,
+                     levels = c(0,1,2),
+                     labels = c("Never","Former","Current"))
+  )
+```
+
+# Train test split
+```{r}
+set.seed(1234)
+split <- initial_split(my_dat,
+                       prop = 0.8,
+                       strata = severity)
+
+train_dat <- training(split)
+test_dat  <- testing(split)
+```
+
+# Exploratory Analysis
+```{r}
+# Summary table
+summary_table <- train_dat %>%
+  select(-id) %>%
+  summary()
+knitr::kable(summary_table)
+```
+
+```{r}
+# Continuous variable
+p1 <- ggplot(my_dat,
+             aes(x = age,
+                 fill = severity)) +
+  geom_histogram(
+    bins = 30,
+    alpha = 0.6,
+    position = "identity"
+  ) +
+  theme_bw() +
+  ggtitle("Age Distribution")
+
+p2 <- ggplot(my_dat,
+             aes(x = severity,
+                 y = height,
+                 fill = severity)) +
+  geom_boxplot() +
+  theme_bw() +
+  ggtitle("Height by Severity")
+
+p3 <- ggplot(my_dat,
+             aes(x = severity,
+                 y = weight,
+                 fill = severity)) +
+  geom_boxplot() +
+  theme_bw() +
+  ggtitle("Weight by Severity")
+
+p4 <- ggplot(my_dat,
+             aes(x = severity,
+                 y = bmi,
+                 fill = severity)) +
+  geom_boxplot() +
+  theme_bw() +
+  ggtitle("BMI by Severity")
+
+p5 <- ggplot(my_dat,
+             aes(x = severity,
+                 y = SBP,
+                 fill = severity)) +
+  geom_boxplot() +
+  theme_bw() +
+  ggtitle("SBP by Severity")
+
+p6 <- ggplot(my_dat,
+             aes(x = severity,
+                 y = LDL,
+                 fill = severity)) +
+  geom_boxplot() +
+  theme_bw() +
+  ggtitle("LDL by Severity")
+
+p7 <- ggplot(my_dat,
+             aes(x = severity,
+                 y = depression,
+                 fill = severity)) +
+  geom_boxplot() +
+  theme_bw() +
+  ggtitle("Depression by Severity")
+
+((p1 + p2 + p3) /
+ (p4 + p5 + p6) /
+ (p7)) +
+plot_layout(guides = "collect",
+            heights = c(1,1,1.6)) &
+theme(
+  plot.title = element_text(size = 10),
+  axis.title = element_text(size = 9),
+  axis.text = element_text(size = 9)
+)
+
+```
+```{r}
+# Categorical variables
+c1 <- ggplot(my_dat,
+             aes(x = gender,
+                 fill = severity)) +
+  geom_bar(position = "fill") +
+  theme_bw() +
+  ggtitle("Gender vs Severity")
+
+c2 <- ggplot(my_dat,
+             aes(x = race,
+                 fill = severity)) +
+  geom_bar(position = "fill") +
+  theme_bw() +
+  ggtitle("Race vs Severity")
+
+c3 <- ggplot(my_dat,
+             aes(x = smoking,
+                 fill = severity)) +
+  geom_bar(position = "fill") +
+  theme_bw() +
+  ggtitle("Smoking vs Severity")
+
+c4 <- ggplot(my_dat,
+             aes(x = hypertension,
+                 fill = severity)) +
+  geom_bar(position = "fill") +
+  theme_bw() +
+  ggtitle("Hypertension vs Severity")
+
+c5 <- ggplot(my_dat,
+             aes(x = diabetes,
+                 fill = severity)) +
+  geom_bar(position = "fill") +
+  theme_bw() +
+  ggtitle("Diabetes vs Severity")
+
+c6 <- ggplot(my_dat,
+             aes(x = vaccine,
+                 fill = severity)) +
+  geom_bar(position = "fill") +
+  theme_bw() +
+  ggtitle("Vaccination vs Severity")
+
+(c1 + c2 + c3) /
+(c4 + c5 + c6)
+```
+```{r}
+# Correlations
+continuous_vars <- my_dat %>%
+  select(
+    age,
+    height,
+    weight,
+    bmi,
+    SBP,
+    LDL,
+    depression
+  )
+
+cor_matrix <- cor(continuous_vars)
+
+corrplot(
+  cor_matrix,
+  method = "color",
+  type = "upper",
+  addCoef.col = "black",
+  number.cex = 0.7
+)
+```
+
+
+# Logistic Regression
+```{r}
+
+```
+
 
