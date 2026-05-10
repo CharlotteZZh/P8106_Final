@@ -549,7 +549,7 @@ plot(
   roc_svm,
   main = "ROC Curve - SVM"
 )
-legend(  "bottomright",  legend = paste("AUC =", round(svm_auc, 3)),  bty = "n",  cex = 1.2)
+legend("bottomright",  legend = paste("AUC =", round(svm_auc, 3)),  bty = "n",  cex = 1.2)
 ```
 ```{r}
 explainer_svm <- explain(
