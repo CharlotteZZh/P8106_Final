@@ -20,6 +20,10 @@ library(DALEX)
 ```{r}
 load("severity.RData")
 dat <- na.omit(dat)
+cat(
+  "Number of observations removed due to N/A:",
+  sum(!complete.cases(dat))
+)
 set.seed(4027)
 my_dat <- dat[sample(nrow(dat), 1000), ]
 ```
@@ -315,15 +319,15 @@ logit_pred <- factor(
 )
 
 # Confusion matrix
-cm <- confusionMatrix(
+cm_logit <- confusionMatrix(
   data = logit_pred,
   reference = test_dat$severity,
   positive = "Severe"
 )
 
-cm_df <- as.data.frame(cm$table)
+cm_logit_df <- as.data.frame(cm_logit$table)
 # Plot
-ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+ggplot(cm_logit_df, aes(x = Reference, y = Prediction, fill = Freq)) +
   geom_tile(color = "white") +
   geom_text(aes(label = Freq), size = 6) +
   scale_fill_gradient(low = "lightgreen", high = "darkgreen") +
@@ -338,7 +342,12 @@ ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
 
 # Boosting
 ```{r}
-ctrl <- trainControl(method = "cv", number = 5)
+ctrl <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary
+)
 ```
 
 ```{r}
@@ -359,6 +368,7 @@ gbm_fit <- train(
   severity ~ .,
   data = train_dat,
   method = "gbm",
+  metric = "ROC",
   tuneGrid = gbm.grid,
   trControl = ctrl,
   verbose = FALSE
@@ -413,15 +423,15 @@ gbm_pred <- predict(
   newdata = test_dat
 )
 
-cm <- confusionMatrix(
+cm_gbm <- confusionMatrix(
   data = gbm_pred,
   reference = test_dat$severity
 )
 
-cm_df <- as.data.frame(cm$table)
+cm_gbm_df <- as.data.frame(cm_gbm$table)
 
 ggplot(
-  cm_df,
+  cm_gbm_df,
   aes(
     x = Reference,
     y = Prediction,
@@ -444,8 +454,6 @@ ggplot(
 ```
 
 ```{r}
-varImp(gbm_fit)
-
 summary(gbm_fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 ```
 
@@ -484,13 +492,13 @@ pred.radial <- predict(
   best.radial,
   newdata = test_dat
 )
-cm <- confusionMatrix(
+cm_svm <- confusionMatrix(
   data = pred.radial,
   reference = test_dat$severity
 )
-cm_df <- as.data.frame(cm$table)
-colnames(cm_df) <- c("Prediction", "Reference", "Freq")
-ggplot(cm_df,
+cm_svm_df <- as.data.frame(cm_svm$table)
+colnames(cm_svm_df) <- c("Prediction", "Reference", "Freq")
+ggplot(cm_svm_df,
        aes(x = Reference,
            y = Prediction,
            fill = Freq)) +
@@ -595,5 +603,42 @@ ggplot(
     ),
     text = element_text(size = 12)
   )
+```
+
+# Model Comparison
+```{r}
+# Model comparison table
+
+comparison_table <- tibble(
+  Model = c("Logistic Regression", "Boosting", "SVM"),
+  
+  Accuracy = c(
+    cm_logit$overall["Accuracy"],
+    cm_gbm$overall["Accuracy"],
+    cm_svm$overall["Accuracy"]
+  ),
+  
+  Sensitivity = c(
+    cm_logit$byClass["Sensitivity"],
+    cm_gbm$byClass["Sensitivity"],
+    cm_svm$byClass["Sensitivity"]
+  ),
+  
+  Specificity = c(
+    cm_logit$byClass["Specificity"],
+    cm_gbm$byClass["Specificity"],
+    cm_svm$byClass["Specificity"]
+  ),
+  
+  AUC = c(
+    as.numeric(auc_logit),
+    as.numeric(auc_gbm),
+    as.numeric(svm_auc)
+  )
+)
+
+comparison_table %>%
+  mutate(across(where(is.numeric), round, 3)) %>%
+  knitr::kable(caption = "Model Comparison")
 ```
 
