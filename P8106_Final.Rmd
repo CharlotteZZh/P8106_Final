@@ -425,7 +425,8 @@ gbm_pred <- predict(
 
 cm_gbm <- confusionMatrix(
   data = gbm_pred,
-  reference = test_dat$severity
+  reference = test_dat$severity,
+  positive = "Severe"
 )
 
 cm_gbm_df <- as.data.frame(cm_gbm$table)
@@ -494,7 +495,8 @@ pred.radial <- predict(
 )
 cm_svm <- confusionMatrix(
   data = pred.radial,
-  reference = test_dat$severity
+  reference = test_dat$severity,
+  positive = "Severe"
 )
 cm_svm_df <- as.data.frame(cm_svm$table)
 colnames(cm_svm_df) <- c("Prediction", "Reference", "Freq")
@@ -636,7 +638,6 @@ comparison_table <- tibble(
     as.numeric(svm_auc)
   )
 )
-
 comparison_table %>%
   mutate(across(where(is.numeric), round, 3)) %>%
   knitr::kable(caption = "Model Comparison")
