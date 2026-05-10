@@ -16,6 +16,7 @@ library(pdp)
 library(patchwork)
 library(gridExtra)
 library(corrplot)
+library(ggplot2)
 ```
 # Load the data
 ```{r}
@@ -74,7 +75,7 @@ test_dat  <- testing(split)
 summary_table <- train_dat %>%
   select(-id) %>%
   summary()
-knitr::kable(summary_table)
+summary_table
 ```
 
 ```{r}
@@ -154,63 +155,59 @@ c1 <- ggplot(my_dat,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Gender vs Severity") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
+  ggtitle("Gender vs Severity") 
 
 c2 <- ggplot(my_dat,
              aes(x = race,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Race vs Severity") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
+  ggtitle("Race vs Severity") 
 
 c3 <- ggplot(my_dat,
              aes(x = smoking,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Smoking vs Severity") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
+  ggtitle("Smoking vs Severity") 
 
 c4 <- ggplot(my_dat,
              aes(x = hypertension,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Hypertension vs Severity") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
+  ggtitle("Hypertension vs Severity") 
+
 
 c5 <- ggplot(my_dat,
              aes(x = diabetes,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Diabetes vs Severity") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
+  ggtitle("Diabetes vs Severity") 
+  
 
 c6 <- ggplot(my_dat,
              aes(x = vaccine,
                  fill = severity)) +
   geom_bar(position = "fill") +
   theme_bw() +
-  ggtitle("Vaccination vs Severity") +
+  ggtitle("Vaccination vs Severity") 
+
+common_theme <- theme_bw() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
+    axis.text.x = element_text(angle = 45,
+                               hjust = 1,
+                               size = 8),
+    plot.title = element_text(size = 10),
+    legend.title = element_text(size = 9),
+    legend.text = element_text(size = 8)
   )
 
-(c1 + c2 + c3) /
-(c4 + c5 + c6)
+((c1 + c2 + c3) /
+(c4 + c5 + c6)) +
+  plot_layout(guides = "collect") &
+  common_theme
 ```
 ```{r}
 # Correlations
@@ -249,5 +246,199 @@ logit_fit <- glm(
 
 summary(logit_fit)
 ```
+
+```{r}
+# OR
+exp(cbind(
+  OR = coef(logit_fit),
+  confint(logit_fit)
+))
+```
+
+```{r}
+# Predicted Probabilities
+logit_prob <- predict(
+  logit_fit,
+  newdata = test_dat,
+  type = "response"
+)
+```
+
+```{r}
+# ROC
+roc_logit <- roc(
+  response = test_dat$severity,
+  predictor = logit_prob,
+  levels = c("NotSevere","Severe")
+)
+
+auc_logit <- auc(roc_logit)
+
+plot(
+  roc_logit,
+  main = "ROC Curve - Logistic Regression",
+  col = "blue",
+  lwd = 2
+)
+
+legend(
+  "bottomright",
+  legend = paste("AUC =", round(auc_logit, 3)),
+  bty = "n"
+)
+```
+
+```{r}
+# Predictions
+logit_pred <- ifelse(logit_prob > 0.5,
+                     "Severe",
+                     "NotSevere")
+
+logit_pred <- factor(
+  logit_pred,
+  levels = c("NotSevere","Severe")
+)
+
+# Confusion matrix
+cm <- confusionMatrix(
+  data = logit_pred,
+  reference = test_dat$severity,
+  positive = "Severe"
+)
+
+cm_df <- as.data.frame(cm$table)
+# Plot
+ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 6) +
+  scale_fill_gradient(low = "lightgreen", high = "darkgreen") +
+  labs(
+    title = "Confusion Matrix - Logistic Regression",
+    x = "Actual Class",
+    y = "Predicted Class",
+    fill = "Count"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+# Boosting
+```{r}
+ctrl <- trainControl(method = "cv", number = 5)
+```
+
+```{r}
+# tuning grid
+gbm.grid <- expand.grid(
+  n.trees = c(100, 200, 500, 1000, 2000, 5000),
+  interaction.depth = 1:4,
+  shrinkage = c(0.005, 0.01, 0.05),
+  n.minobsinnode = 10
+)
+```
+
+```{r}
+# Train
+set.seed(4027)
+
+gbm_fit <- train(
+  severity ~ . -id,
+  data = train_dat,
+  method = "gbm",
+  tuneGrid = gbm.grid,
+  trControl = ctrl,
+  verbose = FALSE
+)
+```
+
+```{r}
+ggplot(gbm_fit)
+```
+```{r}
+# Best parameters
+gbm_fit$bestTune
+```
+
+```{r}
+gbm_prob <- predict(
+  gbm_fit,
+  newdata = test_dat,
+  type = "prob"
+)[,"Severe"]
+```
+
+```{r}
+roc_gbm <- roc(
+  response = test_dat$severity,
+  predictor = gbm_prob,
+  levels = c("NotSevere","Severe")
+)
+
+auc_gbm <- auc(roc_gbm)
+
+plot(
+  roc_gbm,
+  main = "ROC Curve - Boosting",
+  col = "blue",
+  lwd = 2
+)
+
+legend(
+  "bottomright",
+  legend = paste(
+    "AUC =",
+    round(auc_gbm, 3)
+  ),
+  bty = "n"
+)
+```
+
+```{r}
+gbm_pred <- predict(
+  gbm_fit,
+  newdata = test_dat
+)
+
+cm <- confusionMatrix(
+  data = gbm_pred,
+  reference = test_dat$severity
+)
+
+cm_df <- as.data.frame(cm$table)
+
+ggplot(
+  cm_df,
+  aes(
+    x = Reference,
+    y = Prediction,
+    fill = Freq
+  )
+) +
+  geom_tile(color = "white") +
+  geom_text(
+    aes(label = Freq)
+  ) +
+  scale_fill_gradient(
+    low = "lightgreen",
+    high = "darkgreen"
+  ) +
+  labs(
+    title = "Confusion Matrix - Boosting",
+    x = "Actual",
+    y = "Predicted"
+  )
+```
+
+```{r}
+varImp(gbm_fit)
+
+summary(gbm_fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+```
+
+
+
+
+
+
+
 
 
