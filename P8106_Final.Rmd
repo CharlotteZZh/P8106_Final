@@ -10,13 +10,11 @@ library(caret)
 library(tidymodels)
 library(gbm)
 library(e1071)
-library(ranger)
 library(pROC)
-library(pdp)
 library(patchwork)
-library(gridExtra)
 library(corrplot)
 library(ggplot2)
+library(DALEX)
 ```
 # Load the data
 ```{r}
@@ -24,6 +22,35 @@ load("severity.RData")
 dat <- na.omit(dat)
 set.seed(4027)
 my_dat <- dat[sample(nrow(dat), 1000), ]
+```
+
+```{r}
+# Correlations
+continuous_vars <- my_dat %>%
+  select(
+    age,
+    height,
+    weight,
+    bmi,
+    SBP,
+    LDL,
+    depression
+  )
+
+cor_matrix <- cor(continuous_vars)
+
+corrplot(
+  cor_matrix,
+  method = "color",
+  type = "upper",
+  addCoef.col = "black",
+  number.cex = 0.7
+)
+```
+
+```{r}
+my_dat <- my_dat %>%
+  select(-id, -height, -weight)
 ```
 
 # Convert Variables
@@ -73,7 +100,6 @@ test_dat  <- testing(split)
 ```{r}
 # Summary table
 summary_table <- train_dat %>%
-  select(-id) %>%
   summary()
 summary_table
 ```
@@ -90,29 +116,13 @@ p1 <- ggplot(my_dat,
 
 p2 <- ggplot(my_dat,
              aes(x = severity,
-                 y = height,
-                 fill = severity)) +
-  geom_boxplot() +
-  theme_bw() +
-  ggtitle("Height by Severity")
-
-p3 <- ggplot(my_dat,
-             aes(x = severity,
-                 y = weight,
-                 fill = severity)) +
-  geom_boxplot() +
-  theme_bw() +
-  ggtitle("Weight by Severity")
-
-p4 <- ggplot(my_dat,
-             aes(x = severity,
                  y = bmi,
                  fill = severity)) +
   geom_boxplot() +
   theme_bw() +
   ggtitle("BMI by Severity")
 
-p5 <- ggplot(my_dat,
+p3 <- ggplot(my_dat,
              aes(x = severity,
                  y = SBP,
                  fill = severity)) +
@@ -120,7 +130,7 @@ p5 <- ggplot(my_dat,
   theme_bw() +
   ggtitle("SBP by Severity")
 
-p6 <- ggplot(my_dat,
+p4 <- ggplot(my_dat,
              aes(x = severity,
                  y = LDL,
                  fill = severity)) +
@@ -128,7 +138,7 @@ p6 <- ggplot(my_dat,
   theme_bw() +
   ggtitle("LDL by Severity")
 
-p7 <- ggplot(my_dat,
+p5 <- ggplot(my_dat,
              aes(x = severity,
                  y = depression,
                  fill = severity)) +
@@ -136,11 +146,9 @@ p7 <- ggplot(my_dat,
   theme_bw() +
   ggtitle("Depression by Severity")
 
-((p1 + p2 + p3) /
- (p4 + p5 + p6) /
- (p7)) +
-plot_layout(guides = "collect",
-            heights = c(1,1,1.5)) &
+(p1 + p2 + p3) /
+ (p4 + p5) +
+plot_layout(guides = "collect") &
 theme(
   plot.title = element_text(size = 10),
   axis.title = element_text(size = 9),
@@ -209,29 +217,7 @@ common_theme <- theme_bw() +
   plot_layout(guides = "collect") &
   common_theme
 ```
-```{r}
-# Correlations
-continuous_vars <- my_dat %>%
-  select(
-    age,
-    height,
-    weight,
-    bmi,
-    SBP,
-    LDL,
-    depression
-  )
 
-cor_matrix <- cor(continuous_vars)
-
-corrplot(
-  cor_matrix,
-  method = "color",
-  type = "upper",
-  addCoef.col = "black",
-  number.cex = 0.7
-)
-```
 
 
 # Logistic Regression
@@ -253,6 +239,35 @@ exp(cbind(
   OR = coef(logit_fit),
   confint(logit_fit)
 ))
+
+# Plot
+or_df <- data.frame(
+  Variable = rownames(coef(summary(logit_fit))),
+  OR = exp(coef(logit_fit))
+)
+or_df <- or_df %>%
+  filter(Variable != "(Intercept)") %>%
+  arrange(desc(OR))
+ggplot(
+  or_df,
+  aes(
+    x = reorder(Variable, OR),
+    y = OR
+  )
+) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  geom_hline(
+    yintercept = 1,
+    linetype = "dashed",
+    color = "red"
+  ) +
+  theme_bw() +
+  labs(
+    title = "Odds Ratios from Logistic Regression",
+    x = "Variable",
+    y = "Odds Ratio"
+  )
 ```
 
 ```{r}
@@ -341,7 +356,7 @@ gbm.grid <- expand.grid(
 set.seed(4027)
 
 gbm_fit <- train(
-  severity ~ . -id,
+  severity ~ .,
   data = train_dat,
   method = "gbm",
   tuneGrid = gbm.grid,
@@ -434,11 +449,151 @@ varImp(gbm_fit)
 summary(gbm_fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 ```
 
+# SVM
+```{r}
+set.seed(4027)
+
+radial.tune <- tune.svm(
+  severity ~ .,
+  data = train_dat,
+  kernel = "radial",
+  probability = TRUE,
+  cost = exp(seq(0, 4, length = 8)),
+  gamma = exp(seq(-8, -3, length = 6))
+)
+```
+
+```{r}
+plot(
+  radial.tune,
+  transform.y = log,
+  transform.x = log,
+  color.palette = terrain.colors
+)
+```
+```{r}
+radial.tune$best.parameters
+```
+```{r}
+best.radial <- radial.tune$best.model
+summary(best.radial)
+```
+
+```{r}
+pred.radial <- predict(
+  best.radial,
+  newdata = test_dat
+)
+cm <- confusionMatrix(
+  data = pred.radial,
+  reference = test_dat$severity
+)
+cm_df <- as.data.frame(cm$table)
+colnames(cm_df) <- c("Prediction", "Reference", "Freq")
+ggplot(cm_df,
+       aes(x = Reference,
+           y = Prediction,
+           fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq),
+            size = 8) +
+  scale_fill_gradient(low = "lightgreen",
+                      high = "darkgreen") +
+
+  labs(
+    title = "Confusion Matrix - Radial SVM",
+    x = "Actual Class",
+    y = "Predicted Class"
+  ) +
+
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    text = element_text(size = 14)
+  )
+```
+
+```{r}
+# Predicted probabilities
+svm_prob <- predict(
+  best.radial,
+  newdata = test_dat,
+  probability = TRUE
+)
+
+svm_prob <- attr(
+  svm_prob,
+  "probabilities"
+)[,"Severe"]
+```
+
+```{r}
+#ROC/AUC
+roc_svm <- roc(
+  response = test_dat$severity,
+  predictor = svm_prob,
+  levels = c("NotSevere","Severe")
+)
+
+svm_auc <- auc(roc_svm)
+
+plot(
+  roc_svm,
+  main = "ROC Curve - SVM"
+)
+legend(  "bottomright",  legend = paste("AUC =", round(svm_auc, 3)),  bty = "n",  cex = 1.2)
+```
+```{r}
+explainer_svm <- explain(
+  model = best.radial,
+
+  data = train_dat %>%
+    select(-severity),
+
+  y = as.numeric(train_dat$severity == "Severe"),
+
+  label = "Radial SVM",
+
+  verbose = FALSE
+)
 
 
+svm_vi <- model_parts(
+  explainer_svm,
+  type = "difference"
+)
 
 
+svm_vi_df <- svm_vi %>%
+  as.data.frame()
 
+svm_vi_df <- svm_vi_df %>%
+  filter(
+    variable != "_baseline_",
+    variable != "_full_model_"
+  )
 
-
+ggplot(
+  svm_vi_df,
+  aes(
+    x = reorder(variable, dropout_loss),
+    y = dropout_loss
+  )
+) +
+  geom_col(fill = "blue") +
+  coord_flip() +
+  theme_bw() +
+  labs(
+    title = "SVM Variable Importance",
+    x = "Variable",
+    y = "Importance"
+  ) +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5,
+      face = "bold"
+    ),
+    text = element_text(size = 12)
+  )
+```
 
